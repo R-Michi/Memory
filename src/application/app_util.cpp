@@ -97,18 +97,22 @@ std::string Application::make_msg(std::string msg)
     return ss.str();
 }
 
-void Application::make_search_entry(pid_t pid, address_t address, size_t size, uint8_t* value, std::vector<std::string>& entry)
+void Application::make_search_entry(const Buffer::Element& element, std::vector<std::string>& entry)
 {
-    uint64_t s = static_cast<uint64_t>(size);  // size_t is not always 64 bit, its size is implementation defined
-    utility::to_dec_str<pid_t>(pid, entry[0]);
-    utility::to_hex_str<uint64_t>(address, entry[1]);
-    utility::strtype(this->cfg.type(), entry[2]);
-    utility::to_string(reinterpret_cast<const uint8_t*>(&s), sizeof(uint64_t), memory::MEMORY_TYPE_UINT64, false, entry[3]);
-    if (this->cfg.type() == MEMORY_TYPE_STRING)
+    utility::to_dec_str<pid_t>(element.pid, entry[0]);
+    utility::to_hex_str<address_t>(element.address, entry[1]);
+    utility::strtype(element.type, entry[2]);
+    {
+        std::stringstream ss;
+        ss << element.size;
+        entry[3] = ss.str();
+    }
+    const uint8_t* value = reinterpret_cast<const uint8_t*>(element.data);
+    if (element.type == MEMORY_TYPE_STRING)
     {
         entry[4].clear();
         entry[5] = "---";
-        for (size_t i = 0; i < size; i++)
+        for (size_t i = 0; i < element.size; i++)
         {
             // control characters are displayed as '.'
             if (value[i] < 32)
@@ -119,8 +123,8 @@ void Application::make_search_entry(pid_t pid, address_t address, size_t size, u
     }
     else
     {
-        utility::to_string(value, size, this->cfg.type(), false, entry[4]);
-        utility::to_string(value, size, this->cfg.type(), true, entry[5]);
+        utility::to_string(value, element.size, element.type, false, entry[4]);
+        utility::to_string(value, element.size, element.type, true, entry[5]);
     }
 }
 
@@ -277,8 +281,6 @@ uint64_t Application::scan(Process& proc, uint8_t* a, uint8_t* b, size_t size, b
 uint64_t Application::update(uint8_t* a, uint8_t* b, size_t size)
 {
     if (this->undo_buffer.table().size() == 0) return 0;
-
-    uint8_t ref[size];
     bool equal = (memcmp(a, b, size) == 0);
 
     // update all saved addresses
@@ -297,6 +299,7 @@ uint64_t Application::update(uint8_t* a, uint8_t* b, size_t size)
         if (a != nullptr && b != nullptr)
         {
             // update address with new value
+            uint8_t ref[size];
             cur_p.read(e.address, size, ref);
             if (equal ? memcmp(a, ref, size) == 0 : is_between(a, b, ref))
                 this->search_buffer.push(e.pid, e.address, size, this->cfg.type(), ref);
@@ -304,6 +307,7 @@ uint64_t Application::update(uint8_t* a, uint8_t* b, size_t size)
         else
         {
             // reread the current value
+            uint8_t ref[e.size];
             cur_p.read(e.address, e.size, ref);
             this->search_buffer.push(e.pid, e.address, e.size, e.type, ref);
         }

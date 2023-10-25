@@ -67,13 +67,10 @@ namespace memory
 
             /**
             * @brief Makes an entry for search table.
-            * @param[in] pid: process ID
-            * @param[in] address: memory address
-            * @param[in] size: size of the type or string
-            * @param[in] value: bytes of the value
+            * @param[in] element: buffer element
             * @param[out] entry: final entry, ready to be added to the table
             */
-            void make_search_entry(pid_t pid, address_t address, size_t size, uint8_t* value, std::vector<std::string>& entry);
+            void make_search_entry(const Buffer::Element& element, std::vector<std::string>& entry);
 
             /**
             * @brief Makes an entry for the process table.
@@ -146,7 +143,7 @@ namespace memory
             void cmd_show(const Command& cmd);
             void cmd_show_live(const Command& cmd);
             void cmd_dump(const Command& cmd);
-
+            void cmd_save(const Command& cmd);
         public:
             Application(void);
             virtual ~Application(void);

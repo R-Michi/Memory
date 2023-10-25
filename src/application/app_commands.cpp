@@ -19,6 +19,7 @@
 #include <chrono>
 #include <cmath>
 #include <algorithm>
+#include <fstream>
 
 using namespace memory::app;
 
@@ -70,6 +71,7 @@ void Application::cmd_help(const Command& cmd)
         else if (cmd.args().at(0) == "show")                                        { std::cout << msg_help_show()          << std::endl; }
         else if (cmd.args().at(0) == "show_live"    || cmd.args().at(0) == "sl")    { std::cout << msg_help_sl()            << std::endl; }
         else if (cmd.args().at(0) == "dump")                                        { std::cout << msg_help_dump()          << std::endl; }
+        else if (cmd.args().at(0) == "save")                                        { std::cout << msg_help_save()          << std::endl;}
         else                                                                        { std::cout << make_msg(msg_help_invalid(cmd.args().at(0))) << std::endl; }
     }
 }
@@ -605,33 +607,37 @@ void Application::cmd_read_single(const Command& cmd)
     }
 
     // convert arguments
-    memory::address_t addr;
-    size_t size = this->cfg.type_size();
-    sscanf(cmd.args().at(0).c_str(), "%" PRIx64, &addr);
+    Buffer::Element element;
+    element.pid = this->current_process.pid();
+    element.size = this->cfg.type_size();
+    element.type = this->cfg.type();
+
+    sscanf(cmd.args().at(0).c_str(), "%" PRIx64, &element.address);
     if (utility::is_string(this->cfg.type()))
     {
         uint32_t str_size;
         sscanf(cmd.args().at(1).c_str(), "%" PRIu32, &str_size);
-        size = str_size;
+        element.size = str_size;
     }
 
     // read process memory
-    uint8_t value[size];
-    if (this->current_process.read(addr, size, value) == 0)
+    uint8_t value[element.size];
+    element.data = value;
+    if (this->current_process.read(element.address, element.size, value) == 0)
     {
-        std::cout << make_msg(msg_rs_failed(addr)) << std::endl;
+        std::cout << make_msg(msg_rs_failed(element.address)) << std::endl;
         return;
     }
 
     // write value to buffer
     this->make_backup();
-    this->search_buffer.push(this->current_process.pid(), addr, size, this->cfg.type(), value);
-    std::cout << make_msg(msg_rs_success(addr)) << std::endl;
+    this->search_buffer.push(this->current_process.pid(), element.address, element.size, this->cfg.type(), value);
+    std::cout << make_msg(msg_rs_success(element.address)) << std::endl;
 
     // build table (only for read_single)
     std::vector<std::string> entry(this->search_table.col_count());
     this->search_table.clear_entries();
-    this->make_search_entry(this->current_process.pid(), addr, size, value, entry);
+    this->make_search_entry(element, entry);
     this->search_table.add(entry);
 
     // print table instantly (only for read_single)
@@ -1416,8 +1422,7 @@ void Application::cmd_show(const Command& cmd)
     std::vector<std::string> entry(this->search_table.col_count());
     for (uint32_t i = start; i < end && i < this->search_buffer.table().size(); i++)
     {
-        const Buffer::Element& e = this->search_buffer.table()[i];
-        make_search_entry(e.pid, e.address, e.size, reinterpret_cast<uint8_t*>(e.data), entry);
+        make_search_entry(this->search_buffer.table()[i], entry);
         this->search_table.add(entry);
     }
     this->search_table.print();
@@ -1557,6 +1562,95 @@ void Application::cmd_dump(const Command& cmd)
         std::cout << make_msg(msg_dump_success(this->pid_dump)) << std::endl;
 }
 
+void Application::cmd_save(const Command& cmd)
+{
+    // syntax check
+    if(cmd.args().size() != 3)
+    {
+        std::cout << make_msg(msg_save_syntax()) << std::endl;
+        return;
+    }
+
+    // check for invalid options (all options)
+    const std::vector<std::string> all_options = {"b", "-binary", "csv"};
+    std::vector<std::string> unknown_options;
+    list_unknown_options(cmd, all_options, unknown_options);
+    if(unknown_options.size() > 0)
+    {
+        std::cout << make_msg(msg_unknown_options(cmd.name(), unknown_options)) << std::endl;
+        return;
+    }
+
+    // check if there are no conflicting options
+    const bool opt_binary   = (cmd.options().find_any({"b", "-binary"}, 0) != memory::CmdOpionList::NPOS);
+    const bool opt_csv      = (cmd.options().find("csv", 0) != memory::CmdOpionList::NPOS);
+    if(opt_binary && opt_csv)
+    {
+        std::cout << make_msg(msg_save_option_conflict()) << std::endl;
+        return;
+    }
+
+    // check for correct arguments
+    if (!utility::is_dec(cmd.args().at(0)))
+    {
+        std::cout << make_msg(msg_not_dec(cmd.args().at(0), 1, cmd.name())) << std::endl;
+        return;
+    }
+    if (!utility::is_dec(cmd.args().at(1)))
+    {
+        std::cout << make_msg(msg_not_dec(cmd.args().at(1), 2, cmd.name())) << std::endl;
+        return;
+    }
+
+    // convert arguments
+    uint32_t start, end;
+    sscanf(cmd.args().at(0).c_str(), "%" PRIu32, &start);
+    sscanf(cmd.args().at(1).c_str(), "%" PRIu32, &end);     // end = amount
+    end += start;
+
+    // plane text file
+    if(cmd.options().size() == 0)
+    {
+        const std::string file_name = cmd.args().at(2);
+        std::fstream file(file_name, std::ios::out | std::ios::trunc);
+        if(!file)
+        {
+            std::cout << make_msg(msg_save_file_failure(file_name)) << std::endl; 
+            return;
+        }
+
+        // write entries to file
+        for(uint32_t i = start; i < end && this->search_buffer.table().size(); i++)
+        {
+            const Buffer::Element& e = this->search_buffer.table()[i];
+            std::string value;
+            utility::to_string(reinterpret_cast<uint8_t*>(e.data), e.size, this->cfg.type(), false, value);
+            file    << e.pid 
+                    << "," 
+                    << e.address
+                    << "," 
+                    << e.size
+                    << ","
+                    << static_cast<uint32_t>(e.type)
+                    << std::endl;
+        }
+        file.close();
+    }
+
+    // binary file
+    if(opt_binary)
+    {
+        const std::string file_name = cmd.args().at(2);
+        utility::write_addresses_to_file(file_name, this->search_buffer);
+    }
+
+    // csv file
+    if(opt_csv)
+    {
+        
+    }
+}   
+
 
 bool Application::on_command(const Command& cmd)
 {
@@ -1584,6 +1678,7 @@ bool Application::on_command(const Command& cmd)
     else if (cmd.name() == "show")                                  this->cmd_show(cmd);
     else if (cmd.name() == "show_live"      || cmd.name() == "sl")  this->cmd_show_live(cmd);
     else if (cmd.name() == "dump")                                  this->cmd_dump(cmd);
+    else if (cmd.name() == "save")                                  this->cmd_save(cmd);
     else                                                            std::cout << make_msg(msg_unknown_command(cmd.name())) << std::endl;
     return true;
 }

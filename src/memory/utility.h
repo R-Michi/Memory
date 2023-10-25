@@ -116,7 +116,7 @@ namespace memory
         * @return 'true' if the operation was successful and
         *   'false' if the file could not be opened.
         */
-        bool write_addresses_to_file(const std::string& path, const Buffer& bufft);
+        bool write_addresses_to_file(const std::string& path, const Buffer& buff);
 
         /**
         * @brief Reads address from a file and stores them into a vector.

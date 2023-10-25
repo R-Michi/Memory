@@ -1,4 +1,4 @@
-/**
+g/**
 * @file     main.cpp
 * @brief    Main function of memory application.
 * @author   Michael Reim / Github: R-Michi

@@ -48,7 +48,8 @@ namespace memory
                     "redo                   Redoes the current read or search operation.\n"
                     "show                   Showes the currently read addresses and values.\n"
                     "show_live or sl        Showes the currently read addresses and values with live update.\n"
-                    "dump                   Makes a memory dump.\n\n";
+                    "dump                   Makes a memory dump.\n"
+                    "save                   Saves the last read/updated addresses and values to a file.\n\n";
         }
         inline std::string msg_help_exit(void)
         {
@@ -85,7 +86,7 @@ namespace memory
                     "   - aligment          2B unsigned DECIMAL     memory aligment\n"
                     "   - start_address     8B HEXADECIMAL          start address of searching\n"
                     "   - end_address       8B HEXADECIMAL          end address of searching\n"
-                    "   - search_split_size 8B unsigned DECIMAL     how large a memory block can be before it gets split\n"
+                    "   - search_split_size 8B unsigned DECIMAL     how large a memory block can get before it is split\n"
                     "   - search_limit_size 8B unsigned DECIMAL     how much memory (in bytes) is allowed to be stored when searching\n"
                     "Aviable types:\n"
                     "   - int8                                      reads signed 1 byte values from memory\n"
@@ -194,7 +195,7 @@ namespace memory
                     "   - <begin value>     set data - type         lower end of the value range to search for\n"
                     "   - <end value>       set data - type         upper end of the value range to search for\n"
                     "Options:\n"
-                    "   - a or --all                                searches in all accessable processes\n\n";
+                    "   - -a or --all                                searches in all accessable processes\n\n";
         }
         inline std::string msg_help_wa(void)
         {
@@ -282,10 +283,10 @@ namespace memory
         {
             return  "\n------------------------------------------------ Command: show or sl ------------------------------------------------\n"
                     "Command: show_live or sl\n"
-                    "Syntax: show_live | sl <start_entry> <amount> <update speed>\n"
+                    "Syntax: show_live | sl <start entry> <amount> <update speed>\n"
                     "Description: showes the currently read addresses and values with live update\n"
                     "Arguments:\n"
-                    "   - <start_entry>     4B unsigned DECIMAL     number of the start entry\n"
+                    "   - <start_entry>     4B unsigned DECIMAL     ID of the start entry\n"
                     "   - <amount>          4B unsigned DECIMAL     amount of entries that should be shown\n"
                     "   - <update speed>    4B unsigned DECIMAL     update speed in milliseconds\n\n";
         }
@@ -300,6 +301,20 @@ namespace memory
                     "   - <range>               8B HEXADECIMAL          number of bytes that should be dumped\n"
                     "   - <width>               4B HEXADECIMAL          number of bytes that are contained by one line of the memory dump\n"
                     "   - <update speed>        4B unsigned DECIMAL     update speed in milliseconds\n\n";
+        }
+        inline std::string msg_help_save(void)
+        {
+            return  "\n--------------------------------------------------- Command: save ---------------------------------------------------\n"
+                    "Command: save\n"
+                    "Syntax: save <start entry> <amount> <file name>\n"
+                    "Description: saves the last read/updated addresses and values to a file\n"
+                    "   - <start_entry>     4B unsigned DECIMAL     ID of the start entry\n"
+                    "   - <amount>          4B unsigned DECIMAL     number of entries that shound be saved\n"
+                    "   - <file name>       STRING                  name of the file where the entries are saved\n"
+                    "Options:\n"
+                    "   - NO OPTION:                                saves the entries in plane text, where each column is separated by comma ','\n"
+                    "   - -b or --binary                            saves the entries in binary\n"
+                    "   - -csv                                      saves the entries in csv format (this option uses an automatic file-type \".csv\")\n\n";
         }
         inline std::string msg_help_invalid(const std::string& cmd)
         {
@@ -825,6 +840,20 @@ namespace memory
         inline std::string msg_dump_failure(void)
         {
             return "Failed to start memory dump.";
+        }
+
+        // messages for command save
+        inline std::string msg_save_syntax(void)
+        {
+            return "Syntax: save <start entry> <amount> <file name>";
+        }
+        inline std::string msg_save_option_conflict(void)
+        {
+            return "Conflicting options \"-csv\" and \"-b\" or \"-csv\" and \"--binary\" respectively.";
+        }
+        inline std::string msg_save_file_failure(const std::string& name)
+        {
+            return std::string("Failed to open file \"") + name + std::string("\"");
         }
 
         // messages for number format checks
